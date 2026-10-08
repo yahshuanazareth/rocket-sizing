@@ -45,18 +45,22 @@ State University.
 
 | Result | Value |
 |---|---|
-| Vacuum Isp | 327.0 s |
-| Sea-level Isp | 254.1 s |
-| Mass flow rate | 1.529 lb/s |
-| Throat diameter | 1.099 in |
-| Exit diameter | 3.107 in |
+| Vacuum Isp | 322.0 s |
+| Sea-level Isp | 249.1 s |
+| Mass flow rate | 1.553 lb/s |
+| Throat diameter | 1.107 in |
+| Exit diameter | 3.131 in |
 | Exit Mach number | 2.92 |
-| Overall length | 11.07 in |
+| Overall length | 11.10 in |
 
 ## Method
 
 1. **Thermochemistry.** NASA CEA solves for the equilibrium combustion
    products and returns Isp, c\* and the gas properties at each station.
+   CEA assumes the exhaust leaves perfectly straight back; in a conical nozzle
+   it spreads over the wall angle α, so the divergence loss is removed:
+   `λ = (1 + cos α) / 2`, `Isp = Isp_CEA − (1 − λ) · v_exit / g0`.
+   At the baseline this lowers vacuum Isp from 327.0 s to 322.0 s.
 2. **Mass flow.** Specific impulse is thrust per unit propellant flow, so
    `mdot = F / Isp`. The mixture ratio splits it into fuel and oxidizer:
    `mdot_fuel = mdot / (1 + O/F)`.
@@ -65,8 +69,9 @@ State University.
 4. **Lengths.** The converging and diverging walls are straight cones, so
    `L = (R2 - R1) / tan(angle)`. Chamber volume comes from the characteristic
    length: `Vc = L* * At`.
-5. **Check.** The thrust coefficient `Cf = F / (Pc * At)` gives an independent
-   check on the nozzle against CEA's value.
+5. **Thrust coefficient.** `Cf = F / (Pc * At)` scores the nozzle on its own.
+   Because the throat is sized from c\*, this is a consistency identity
+   (`Isp = c* · Cf / g0`), not an independent check.
 
 ## Running it (macOS)
 
@@ -99,10 +104,11 @@ folder. The program runs entirely on the local computer.
 
 ## Limitations
 
-This is an ideal, first-pass sizing. It assumes equilibrium chemistry with no
-friction, heat loss or incomplete combustion, and a sharp-cornered conical
-nozzle. It does not cover cooling, wall thickness, injector design or
-structures. Real engines typically achieve 90–97% of the calculated Isp.
+This is a first-pass sizing. It assumes equilibrium chemistry, and apart from
+the conical nozzle's divergence loss it includes no losses (friction, heat
+transfer, incomplete combustion). The nozzle is a sharp-cornered cone. It does
+not cover cooling, wall thickness, injector design or structures. Real engines
+typically achieve 90–97% of the ideal CEA Isp.
 
 ## Development
 
