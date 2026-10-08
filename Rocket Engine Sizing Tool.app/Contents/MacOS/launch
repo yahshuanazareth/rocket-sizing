@@ -1,0 +1,25 @@
+#!/bin/bash
+# Launcher for the Rocket Engine Sizing Tool desktop app.
+
+# The project folder is the one this .app sits in. If the app has been moved
+# (for example into Applications), fall back to ~/rocket-sizing.
+DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+[ -f "$DIR/desktop.py" ] || DIR="$HOME/rocket-sizing"
+cd "$DIR" || exit 1
+LOG="$DIR/app.log"
+
+if [ ! -x .venv/bin/python ]; then
+  osascript -e 'display alert "Rocket Engine Sizing Tool" message "Could not find the .venv folder in ~/rocket-sizing."'
+  exit 1
+fi
+
+# First launch only: install anything that's missing.
+if ! .venv/bin/python -c "import streamlit, pandas, rocketcea, webview" 2>/dev/null; then
+  osascript -e 'display notification "First launch: installing components. This takes about a minute." with title "Rocket Engine Sizing Tool"'
+  if ! .venv/bin/python -m pip install -r requirements.txt >"$LOG" 2>&1; then
+    osascript -e 'display alert "Rocket Engine Sizing Tool" message "Setup failed. See app.log in the rocket-sizing folder."'
+    exit 1
+  fi
+fi
+
+exec .venv/bin/python desktop.py >>"$LOG" 2>&1

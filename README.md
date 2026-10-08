@@ -1,0 +1,112 @@
+# Rocket Engine Sizing Tool
+
+A desktop program for the preliminary sizing of small liquid rocket engines.
+Choose the propellants, target thrust and chamber pressure, and it calculates
+the propellant flow rates, the main thrust chamber dimensions and the gas
+conditions through the engine, then produces a dimensioned engineering drawing
+and trade studies on the key design choices.
+
+Combustion properties come from NASA's CEA (Chemical Equilibrium with
+Applications) program through the `rocketcea` Python library.
+
+**Program by Yahshua Nazareth**, aerospace engineering student at San José
+State University.
+
+![Application window](docs/app.png)
+
+## Features
+
+- **Propellants:** liquid oxygen or nitrous oxide, with methane, RP-1,
+  hydrogen, ethanol or propane
+- **Performance:** vacuum and sea-level specific impulse, characteristic
+  velocity c\*, thrust coefficient, chamber temperature
+- **Flow:** total, oxidizer and fuel mass flow rates
+- **Geometry:** throat, exit and chamber diameters; chamber, converging and
+  nozzle lengths
+- **Station data:** pressure, temperature and Mach number at the chamber,
+  throat and nozzle exit
+- **Exhaust composition:** combustion products in the chamber and at the exit
+- **Trade studies:** Isp, temperature and size against mixture ratio, chamber
+  pressure and expansion ratio
+- **Exports:** the drawing as PNG, the wall contour as CSV for CAD, and the
+  full results as CSV
+
+![Engineering drawing](docs/drawing.png)
+
+## Baseline design
+
+| Input | Value |
+|---|---|
+| Propellants | LOX / methane |
+| Thrust | 500 lbf (vacuum) |
+| Chamber pressure | 300 psia |
+| Mixture ratio (O/F) | 3.3 |
+| Expansion ratio | 8 |
+
+| Result | Value |
+|---|---|
+| Vacuum Isp | 327.0 s |
+| Sea-level Isp | 254.1 s |
+| Mass flow rate | 1.529 lb/s |
+| Throat diameter | 1.099 in |
+| Exit diameter | 3.107 in |
+| Exit Mach number | 2.92 |
+| Overall length | 11.07 in |
+
+## Method
+
+1. **Thermochemistry.** NASA CEA solves for the equilibrium combustion
+   products and returns Isp, c\* and the gas properties at each station.
+2. **Mass flow.** Specific impulse is thrust per unit propellant flow, so
+   `mdot = F / Isp`. The mixture ratio splits it into fuel and oxidizer:
+   `mdot_fuel = mdot / (1 + O/F)`.
+3. **Areas.** `At = mdot * c* / (Pc * g0)`, then `Ae = ε * At` and
+   `Ac = (Ac/At) * At`. Each diameter is `D = 2 * sqrt(A / π)`.
+4. **Lengths.** The converging and diverging walls are straight cones, so
+   `L = (R2 - R1) / tan(angle)`. Chamber volume comes from the characteristic
+   length: `Vc = L* * At`.
+5. **Check.** The thrust coefficient `Cf = F / (Pc * At)` gives an independent
+   check on the nozzle against CEA's value.
+
+## Running it (macOS)
+
+Requirements: Python 3.12 and a Fortran compiler for `rocketcea`.
+
+```
+brew install python@3.12 gcc
+git clone <this repository>
+cd rocket-sizing
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python desktop.py
+```
+
+After setup, double-click **Rocket Engine Sizing Tool.app** in the project
+folder. The program runs entirely on the local computer.
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `engine.py` | All engineering calculations, with no interface code |
+| `app.py` | The interface: inputs, drawing, tables and plots |
+| `desktop.py` | Opens the interface in its own desktop window |
+| `sizing.py` | The original step-by-step script the project started from |
+| `requirements.txt` | Python libraries the program needs |
+| `.streamlit/config.toml` | Blueprint colour theme |
+| `Rocket Engine Sizing Tool.app` | macOS launcher |
+
+## Limitations
+
+This is an ideal, first-pass sizing. It assumes equilibrium chemistry with no
+friction, heat loss or incomplete combustion, and a sharp-cornered conical
+nozzle. It does not cover cooling, wall thickness, injector design or
+structures. Real engines typically achieve 90–97% of the calculated Isp.
+
+## Development
+
+I derived the core sizing method (flow rates, throat, exit and nozzle length)
+by hand. I used Claude, an AI assistant, as a mentor through those
+derivations, and it wrote much of the code, including the interface and the
+chamber, station-data and trade-study calculations.
