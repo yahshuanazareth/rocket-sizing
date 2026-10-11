@@ -90,6 +90,25 @@ python desktop.py
 After setup, double-click **Rocket Engine Sizing Tool.app** in the project
 folder. The program runs entirely on the local computer.
 
+## Running it (Windows)
+
+Requirements: Windows 10 or 11 and Python 3.12. No compiler is needed on
+Windows: `rocketcea` installs ready-built.
+
+1. Install Python 3.12 from [python.org](https://www.python.org/downloads/windows/).
+   During setup, tick **Add python.exe to PATH**.
+2. Download or clone this repository and open the folder.
+3. Double-click **Start Rocket Sizing Tool (Windows).bat**.
+
+The first launch creates a Python environment and installs the libraries,
+which takes a few minutes. After that it opens straight into the app window.
+If Windows SmartScreen warns about the file, choose **More info → Run anyway**.
+
+The window uses Microsoft Edge WebView2, which is built into Windows 11 and
+current Windows 10. If the window stays blank, install the
+[WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
+Server messages are written to `app.log` in the project folder.
+
 ## Files
 
 | File | Purpose |
@@ -101,6 +120,8 @@ folder. The program runs entirely on the local computer.
 | `requirements.txt` | Python libraries the program needs |
 | `.streamlit/config.toml` | Blueprint colour theme |
 | `Rocket Engine Sizing Tool.app` | macOS launcher |
+| `Start Rocket Sizing Tool.command` | macOS launcher that shows the log in Terminal |
+| `Start Rocket Sizing Tool (Windows).bat` | Windows launcher |
 
 ## Limitations
 

@@ -8,7 +8,8 @@ How it works:
   3. Shuts the server down when you close the window.
 
 Run it with:   python desktop.py
-or double-click "Rocket Engine Sizing Tool.app".
+or double-click "Rocket Engine Sizing Tool.app" (Mac)
+or "Start Rocket Sizing Tool (Windows).bat" (Windows).
 """
 
 import os
@@ -59,6 +60,13 @@ def main():
     port = free_port()
     url = f"http://127.0.0.1:{port}"
 
+    # On Windows the launcher starts this file with pythonw.exe, which has no
+    # console, so send the server's messages to app.log instead. The Mac
+    # launcher already redirects everything to app.log itself.
+    log = None
+    if sys.stdout is None:
+        log = open(os.path.join(HERE, "app.log"), "a", encoding="utf-8")
+
     server = subprocess.Popen(
         [sys.executable, "-m", "streamlit", "run", os.path.join(HERE, "app.py"),
          "--server.headless", "true",
@@ -66,6 +74,10 @@ def main():
          "--server.port", str(port),
          "--global.developmentMode", "false"],
         cwd=HERE,
+        stdout=log,
+        stderr=log,
+        # Windows: don't pop up a console window for the server
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
 
     webview.settings["ALLOW_DOWNLOADS"] = True   # lets the download buttons save files
@@ -89,6 +101,8 @@ def main():
             server.wait(timeout=5)
         except subprocess.TimeoutExpired:
             server.kill()
+        if log:
+            log.close()
 
 
 if __name__ == "__main__":
