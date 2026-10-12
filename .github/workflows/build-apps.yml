@@ -1,0 +1,54 @@
+# Builds the double-click apps on GitHub's own computers.
+#
+# Run it by hand: repository > Actions > "Build apps" > Run workflow.
+#   The finished zips appear under the run's "Artifacts".
+# Or push a version tag (e.g. v1.0): the zips are also attached to a
+#   GitHub Release with that name, ready to link to from the website.
+
+name: Build apps
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write   # lets the workflow create the Release on a tag
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install libraries
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+      - name: Build the app
+        run: pyinstaller --noconfirm rocket_sizing.spec
+      - name: Quick check that it starts its server
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "dist/Rocket Engine Sizing Tool/Rocket Engine Sizing Tool.exe" -ArgumentList "--serve","8770" -PassThru
+          $ok = $false
+          for ($i = 0; $i -lt 60 -and -not $ok; $i++) {
+            Start-Sleep -Seconds 1
+            try { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8770/_stcore/health | Out-Null; $ok = $true } catch {}
+          }
+          Stop-Process -Id $p.Id -Force
+          if (-not $ok) { throw "The packaged app's server did not start" }
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path "dist/Rocket Engine Sizing Tool" -DestinationPath "Rocket Sizing Tool (Windows).zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Rocket Sizing Tool (Windows)
+          path: Rocket Sizing Tool (Windows).zip
+      - name: Attach to the Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Rocket Sizing Tool (Windows).zip
