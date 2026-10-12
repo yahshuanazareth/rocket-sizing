@@ -1,23 +1,49 @@
 #!/bin/bash
 # Launcher for the Rocket Engine Sizing Tool desktop app.
 
-# The project folder is the one this .app sits in. If the app has been moved
+# Find the program files. Download layout: a "Resources" folder next to this
+# .app. Project layout: the files next to the .app. If the app has been moved
 # (for example into Applications), fall back to ~/rocket-sizing.
-DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
-[ -f "$DIR/desktop.py" ] || DIR="$HOME/rocket-sizing"
+APPDIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+if [ -f "$APPDIR/Resources/desktop.py" ]; then
+  DIR="$APPDIR/Resources"
+elif [ -f "$APPDIR/desktop.py" ]; then
+  DIR="$APPDIR"
+else
+  DIR="$HOME/rocket-sizing"
+fi
 cd "$DIR" || exit 1
 LOG="$DIR/app.log"
 
+alert() {
+  osascript -e "display alert \"Rocket Engine Sizing Tool\" message \"$1\""
+}
+
+# First launch: create the Python environment. Apps opened from Finder don't
+# see the Terminal's PATH, so look in the usual install locations directly.
 if [ ! -x .venv/bin/python ]; then
-  osascript -e 'display alert "Rocket Engine Sizing Tool" message "Could not find the .venv folder in ~/rocket-sizing."'
-  exit 1
+  PY=""
+  for p in /opt/homebrew/bin/python3.12 /usr/local/bin/python3.12 \
+           /Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12 \
+           "$(command -v python3.12 2>/dev/null)"; do
+    if [ -n "$p" ] && [ -x "$p" ]; then PY="$p"; break; fi
+  done
+  if [ -z "$PY" ]; then
+    alert "Python 3.12 is needed. Install it with Homebrew (brew install python@3.12 gcc) or from python.org, then open the app again."
+    exit 1
+  fi
+  osascript -e 'display notification "First launch: setting up. This takes a few minutes." with title "Rocket Engine Sizing Tool"'
+  if ! "$PY" -m venv .venv >"$LOG" 2>&1; then
+    alert "Setup failed. See app.log in the Resources folder."
+    exit 1
+  fi
 fi
 
-# First launch only: install anything that's missing.
+# Install anything that's missing (first launch, or after an update).
 if ! .venv/bin/python -c "import streamlit, pandas, rocketcea, webview" 2>/dev/null; then
-  osascript -e 'display notification "First launch: installing components. This takes about a minute." with title "Rocket Engine Sizing Tool"'
-  if ! .venv/bin/python -m pip install -r requirements.txt >"$LOG" 2>&1; then
-    osascript -e 'display alert "Rocket Engine Sizing Tool" message "Setup failed. See app.log in the rocket-sizing folder."'
+  osascript -e 'display notification "Installing components. This takes a few minutes." with title "Rocket Engine Sizing Tool"'
+  if ! .venv/bin/python -m pip install -r requirements.txt >>"$LOG" 2>&1; then
+    alert "Setup failed. See app.log in the Resources folder."
     exit 1
   fi
 fi

@@ -2,7 +2,8 @@
 rem Rocket Engine Sizing Tool - Windows launcher.
 rem Double-click to start. The first launch sets everything up (a few minutes).
 setlocal
-cd /d "%~dp0"
+rem Download layout: program files in a "Resources" folder next to this file.
+if exist "%~dp0Resources\desktop.py" (cd /d "%~dp0Resources") else (cd /d "%~dp0")
 title Rocket Engine Sizing Tool
 
 if exist ".venv\Scripts\python.exe" goto check
@@ -40,6 +41,6 @@ exit /b 1
 
 :failed
 echo.
-echo Setup failed. See the messages above, or app.log in this folder.
+echo Setup failed. See the messages above, or app.log in the Resources folder.
 pause
 exit /b 1
