@@ -11,6 +11,42 @@ All of the engineering math lives in engine.py; this file only collects the
 inputs and displays the results in a blueprint style.
 """
 
+import time
+
+import streamlit as st
+
+import splash
+import updates
+from version import VERSION
+
+updates.start()   # look for a newer release in the background
+
+st.set_page_config(page_title="Rocket Engine Sizing Tool", page_icon="🚀",
+                   layout="wide")
+
+# Loading screen: shown only on the first load of a session, while NASA CEA
+# and the trade studies run, then removed once the page has finished drawing.
+FIRST_LOAD = "loaded" not in st.session_state
+_splash = st.empty()
+
+# The real work can finish faster than the eye can follow, so each step stays
+# on screen for at least this long. Purely cosmetic: set it to 0 to turn off.
+MIN_STEP_SECONDS = 0.7
+_last_step = [time.monotonic()]
+
+
+def loading_stage(n):
+    if FIRST_LOAD:
+        wait = MIN_STEP_SECONDS - (time.monotonic() - _last_step[0])
+        if wait > 0:
+            time.sleep(wait)
+        _splash.markdown(f"<style>{splash.CSS}</style>{splash.splash_html(n)}",
+                         unsafe_allow_html=True)
+        _last_step[0] = time.monotonic()
+
+
+loading_stage(1)
+
 import datetime
 import io
 import logging
@@ -22,7 +58,6 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon, Rectangle
 import numpy as np
 import pandas as pd
-import streamlit as st
 
 import engine
 from engine import Inputs, size_engine, contour, sweep, composition
@@ -58,9 +93,6 @@ plt.rcParams.update({
     "hatch.color": WHITE,
     "hatch.linewidth": 0.5,
 })
-
-st.set_page_config(page_title="Rocket Engine Sizing Tool", page_icon="🚀",
-                   layout="wide")
 
 st.markdown(f"""
 <style>
@@ -159,9 +191,11 @@ inp = Inputs(ox=ox, fuel=fuel, thrust=thrust, Pc=float(Pc), MR=MR, eps=eps,
              half_angle=float(half_angle), conv_angle=float(conv_angle))
 settings = tuple(sorted(inp.__dict__.items()))
 
+loading_stage(2)
 try:
     res = cached_size(settings)
 except Exception as err:
+    _splash.empty()
     st.error("NASA CEA could not find a solution for these inputs. "
              f"Try a different mixture ratio or pressure. ({err})")
     st.stop()
@@ -174,10 +208,11 @@ DWG_NO = f"RES-{ox}-{fuel}-{int(round(thrust))}".upper()
 # Header and headline numbers
 # ---------------------------------------------------------------------------
 st.title("ROCKET ENGINE SIZING TOOL")
+update_slot = st.empty()   # filled at the end if a newer version is out
 st.markdown(
     f'<div class="bp-sub">{ox_label.upper()} / {fuel_label.upper()} · '
     f'{thrust:,.0f} LBF {basis.upper()} · DWG {DWG_NO} · '
-    f'THERMOCHEMISTRY: NASA CEA · {AUTHOR.upper()}</div>',
+    f'THERMOCHEMISTRY: NASA CEA · {AUTHOR.upper()} · V{VERSION}</div>',
     unsafe_allow_html=True)
 st.write("")
 
@@ -381,6 +416,7 @@ def blueprint_axes(fig, ax):
 tab_draw, tab_results, tab_trades, tab_method = st.tabs(
     ["DRAWING", "ANALYSIS", "TRADE STUDIES", "METHOD"])
 
+loading_stage(3)
 with tab_draw:
     fig = draw_blueprint(res, inp)
     st.pyplot(fig)
@@ -498,6 +534,7 @@ def line_plot(x, ys, labels, xlabel, ylabel, current_x, colors=None):
     return fig
 
 
+loading_stage(4)
 with tab_trades:
     st.markdown("Each plot changes **one** input and holds the rest at the "
                 "current design point.")
@@ -628,3 +665,30 @@ oxidizer.
 ---
 Rocket Engine Sizing Tool · program by **{AUTHOR}**
 """)
+
+# Page finished: remove the loading screen.
+# Update notice. The check started when the app opened and has usually
+# finished by now; if not, the notice appears on the next interaction.
+_update = updates.available()
+if _update:
+    _latest, _url = _update
+    update_slot.markdown(f"""
+<style>
+.bp-update {{
+  border: 1.5px solid #ffd23f; outline: 1px solid rgba(255,210,63,0.35);
+  outline-offset: 4px; padding: 10px 16px; margin: 4px 0 14px 0;
+  font-family: Menlo, "DejaVu Sans Mono", Consolas, monospace;
+  font-size: 13px; letter-spacing: 0.08em; color: #ffd23f;
+  background: rgba(255,210,63,0.06);
+}}
+.bp-update a {{ color: #ffd23f; font-weight: 700; text-decoration: underline; }}
+</style>
+<div class="bp-update">▲ UPDATE AVAILABLE · VERSION {_latest} IS OUT
+(YOU HAVE {VERSION}) · <a href="{_url}" target="_blank">DOWNLOAD IT HERE ↗</a></div>
+""", unsafe_allow_html=True)
+
+if FIRST_LOAD:
+    st.session_state["loaded"] = True
+    loading_stage(len(splash.STAGES))   # every step green, 100%
+    time.sleep(MIN_STEP_SECONDS)
+    _splash.empty()

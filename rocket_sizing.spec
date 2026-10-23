@@ -12,10 +12,10 @@ from PyInstaller.utils.hooks import (collect_all, collect_data_files,
 NAME = "Rocket Engine Sizing Tool"
 
 # Program files the Streamlit server reads at run time
-datas = [("app.py", "."), ("engine.py", "."),
+datas = [("app.py", "."), ("engine.py", "."), ("splash.py", "."), ("updates.py", "."), ("version.py", "."),
          (".streamlit/config.toml", ".streamlit")]
 binaries = []
-hiddenimports = ["engine", "rocketcea.cea_obj", "rocketcea.py_cea",
+hiddenimports = ["engine", "splash", "updates", "version", "certifi", "rocketcea.cea_obj", "rocketcea.py_cea",
                  "matplotlib.backends.backend_agg", "matplotlib.pyplot",
                  "matplotlib.patches", "pandas", "numpy"]
 

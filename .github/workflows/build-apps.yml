@@ -20,6 +20,13 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Check version.py matches the tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $want = "${{ github.ref_name }}".TrimStart("v")
+          $have = (Select-String -Path version.py -Pattern 'VERSION = "(.*)"').Matches[0].Groups[1].Value
+          if ($have -ne $want) { throw "version.py says $have but the tag is v$want. Change VERSION in version.py to $want, commit, and tag again." }
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

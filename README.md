@@ -123,6 +123,16 @@ Server messages are written to `app.log` in the project folder.
 | `Start Rocket Sizing Tool.command` | macOS launcher that shows the log in Terminal |
 | `Start Rocket Sizing Tool (Windows).bat` | Windows launcher |
 
+## Updates
+
+When the app opens, it checks GitHub for a newer release and shows a notice
+with a download link if there is one. Copies downloaded with `git clone`
+update themselves each time the app opens (`git pull --ff-only`, which never
+overwrites local changes).
+
+To publish a release: change `VERSION` in `version.py`, commit, then push a
+tag with the same number (for example `v1.1`). GitHub builds the downloads.
+
 ## Limitations
 
 This is a first-pass sizing. It assumes equilibrium chemistry, and apart from

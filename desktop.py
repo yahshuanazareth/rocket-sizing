@@ -12,13 +12,17 @@ or double-click "Rocket Engine Sizing Tool.app" (Mac)
 or "Start Rocket Sizing Tool (Windows).bat" (Windows).
 """
 
+import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
 import threading
 import time
 import urllib.request
+
+import splash
 
 TITLE = "Rocket Engine Sizing Tool"
 
@@ -83,17 +87,42 @@ def log_path():
     os.makedirs(folder, exist_ok=True)
     return os.path.join(folder, "app.log")
 
-LOADING_PAGE = """
-<html><body style="margin:0;height:100vh;display:flex;align-items:center;
-justify-content:center;background:#0b3866;color:#fff;font-family:Menlo,monospace;
-background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),
-linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);
-background-size:24px 24px;">
-<div style="text-align:center;letter-spacing:.12em">
-<div style="font-size:26px;font-weight:bold">ROCKET ENGINE SIZING TOOL</div>
-<div style="margin-top:14px;color:#cfe3ff;font-size:13px">LOADING NASA CEA&hellip;</div>
-</div></body></html>
-"""
+
+
+
+def update_from_git():
+    """For copies downloaded with git: get the newest version from GitHub
+    before starting. "--ff-only" only ever moves forward to GitHub's version,
+    so it never overwrites changes made in this folder; if anything stands in
+    the way (no internet, local edits, no git) it skips the update quietly."""
+    if FROZEN or not os.path.isdir(os.path.join(HERE, ".git")) or not shutil.which("git"):
+        return
+    req = os.path.join(HERE, "requirements.txt")
+
+    def read(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                return f.read()
+        except OSError:
+            return ""
+
+    before = read(req)
+    try:
+        r = subprocess.run(
+            ["git", "pull", "--ff-only", "--quiet"], cwd=HERE, timeout=20,
+            capture_output=True, text=True, stdin=subprocess.DEVNULL,
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},   # never ask for a password
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except Exception as err:
+        print("Update check skipped:", err)
+        return
+    if r.returncode != 0:
+        print("Update skipped:", (r.stderr or r.stdout).strip())
+        return
+    # The update added a library: install it before the app needs it.
+    if read(req) != before:
+        subprocess.run([sys.executable, "-m", "pip", "install", "-r", req], cwd=HERE,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
 
 def free_port():
@@ -132,37 +161,46 @@ def main():
     if FROZEN or sys.stdout is None:
         log = open(log_path(), "a", encoding="utf-8")
 
-    server = subprocess.Popen(
-        server_command(port),
-        cwd=HERE,
-        stdin=subprocess.PIPE,      # the server's lifeline (see exit_with_parent)
-        stdout=log,
-        stderr=log,
-        # Windows: don't pop up a console window for the server
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-    )
-
     webview.settings["ALLOW_DOWNLOADS"] = True   # lets the download buttons save files
     window = webview.create_window(
-        TITLE, html=LOADING_PAGE, width=1440, height=920, min_size=(1000, 680),
+        TITLE, html=splash.splash_page(0), width=1440, height=920, min_size=(1000, 680),
         background_color="#0b3866", text_select=True)
 
+    server = []
+
     def load_app():
+        # Runs once the window is open, so the loading screen shows meanwhile.
+        update_from_git()
+        server.append(subprocess.Popen(
+            server_command(port),
+            cwd=HERE,
+            stdin=subprocess.PIPE,      # the server's lifeline (see exit_with_parent)
+            stdout=log,
+            stderr=log,
+            # Windows: don't pop up a console window for the server
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        ))
         if wait_until_ready(url):
+            # Server is up: tick off the first step on the page already showing.
+            # (Updating it in place, rather than loading a second page, keeps
+            # it from racing with the app page below.)
+            window.evaluate_js("document.body.innerHTML = "
+                               + json.dumps(splash.splash_html(1)))
             window.load_url(url)
         else:
-            window.load_html(LOADING_PAGE.replace(
-                "LOADING NASA CEA&hellip;",
-                "COULD NOT START. DETAILS: " + log_path().replace("&", "&amp;").replace("<", "&lt;")))
+            window.load_html(splash.splash_page(0, error=(
+                "Could not start. Details: "
+                + log_path().replace("&", "&amp;").replace("<", "&lt;"))))
 
     try:
         webview.start(load_app)
     finally:
-        server.terminate()
-        try:
-            server.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            server.kill()
+        for proc in server:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
         if log:
             log.close()
 
