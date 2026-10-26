@@ -47,28 +47,37 @@ def server_command(port):
     """The command that starts the Streamlit server on this port. The server
     runs as a second copy of this program in --serve mode."""
     me = [sys.executable] if FROZEN else [sys.executable, os.path.abspath(__file__)]
-    return [*me, "--serve", str(port), "--watch-parent"]
+    return [*me, "--serve", str(port), "--parent-pid", str(os.getpid())]
 
 
-def exit_with_parent():
-    """Lifeline: the window process keeps a pipe open to this process's input.
-    However the window process ends (closed, quit, crashed), the system closes
-    the pipe, the read below returns nothing, and the server shuts down."""
-    try:
-        while os.read(0, 1024):
-            pass
-    except OSError:
-        pass
+def exit_with_parent(parent_pid):
+    """Lifeline: shut the server down when the window process ends, however
+    it ends (closed, quit, crashed).
+
+    It waits on the window process itself. An earlier version waited on a
+    pipe instead, but on Windows a thread waiting on a pipe blocks other
+    libraries from loading, which froze the app at 20% on the loading screen."""
+    if os.name == "nt":
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        SYNCHRONIZE, INFINITE = 0x00100000, 0xFFFFFFFF
+        handle = kernel32.OpenProcess(SYNCHRONIZE, False, parent_pid)
+        if not handle:
+            return   # can't watch it; the window process stops us on exit anyway
+        kernel32.WaitForSingleObject(handle, INFINITE)
+    else:
+        while os.getppid() == parent_pid:
+            time.sleep(1)
     os._exit(0)
 
 
-def serve(port, watch_parent=False):
+def serve(port, parent_pid=None):
     """Run the Streamlit server inside this process."""
-    if watch_parent:
-        threading.Thread(target=exit_with_parent, daemon=True).start()
-    # Load the heavy math libraries now, on the main thread. On Windows,
-    # numpy can freeze forever if its first import happens on the background
-    # thread Streamlit runs app.py on (it hung at 20% on the loading screen).
+    if parent_pid:
+        threading.Thread(target=exit_with_parent, args=(parent_pid,),
+                         daemon=True).start()
+    # Load the heavy libraries on the main thread before Streamlit starts,
+    # rather than on the background thread Streamlit runs app.py on.
     import numpy  # noqa: F401
     import pandas  # noqa: F401
     import matplotlib
@@ -193,7 +202,9 @@ def wait_until_ready(url, timeout=90):
 
 def main():
     if len(sys.argv) >= 3 and sys.argv[1] == "--serve":
-        serve(sys.argv[2], watch_parent="--watch-parent" in sys.argv)
+        parent = (int(sys.argv[sys.argv.index("--parent-pid") + 1])
+                  if "--parent-pid" in sys.argv else None)
+        serve(sys.argv[2], parent_pid=parent)
         return
     if len(sys.argv) >= 3 and sys.argv[1] == "--selftest":
         selftest(sys.argv[2])
@@ -227,7 +238,7 @@ def main():
         server.append(subprocess.Popen(
             server_command(port),
             cwd=HERE,
-            stdin=subprocess.PIPE,      # the server's lifeline (see exit_with_parent)
+            stdin=subprocess.DEVNULL,
             stdout=log,
             stderr=log,
             # Windows: don't pop up a console window for the server
