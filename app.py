@@ -48,6 +48,15 @@ def loading_stage(n):
 
 loading_stage(1)
 
+# If the first load ever freezes, write what every part of the program is
+# doing to app.log every 30 seconds, so the cause can be found.
+if FIRST_LOAD:
+    import faulthandler, sys
+    try:
+        faulthandler.dump_traceback_later(30, repeat=True, file=sys.stdout)
+    except Exception:
+        pass
+
 import datetime
 import io
 import logging
@@ -689,6 +698,7 @@ if _update:
 """, unsafe_allow_html=True)
 
 if FIRST_LOAD:
+    faulthandler.cancel_dump_traceback_later()
     st.session_state["loaded"] = True
     loading_stage(len(splash.STAGES))   # every step green, 100%
     time.sleep(MIN_STEP_SECONDS)
