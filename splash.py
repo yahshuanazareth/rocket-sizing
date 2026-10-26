@@ -64,6 +64,9 @@ CSS = """
 #res-splash .pct { color: #ffd23f; }
 /* If the app hits an error, get out of the way so the message can be read. */
 .stApp:has([data-testid="stException"]) #res-splash { display: none; }
+#res-splash .slow { margin-top: 12px; font-size: 11px; letter-spacing: 0.06em;
+  color: #ffd23f; opacity: 0; animation: res-show 0s linear 60s forwards; }
+@keyframes res-show { to { opacity: 1; } }
 #res-splash .err { margin-top: 14px; color: #ffd27f; font-size: 12px; letter-spacing: 0.06em; }
 """
 
@@ -101,6 +104,8 @@ def splash_html(stage: int, error: str = "") -> str:
         f'{ENGINE_SVG}'
         f'<div class="bar"><div class="fill" style="width:{pct}%"></div></div>'
         f'<ol>{"".join(items)}</ol>{err}'
+        f'<div class="slow">This step is taking longer than usual. If it does not '
+        f'finish, close the app and send app.log to the developer.</div>'
         f'<div class="foot"><span>PROGRAM BY {AUTHOR.upper()}</span><span class="pct">LOADING {pct}%</span></div>'
         f'</div></div>'
     )

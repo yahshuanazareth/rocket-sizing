@@ -47,6 +47,13 @@ jobs:
           }
           Stop-Process -Id $p.Id -Force
           if (-not $ok) { throw "The packaged app's server did not start" }
+      - name: Check that it can run the engine calculation
+        shell: pwsh
+        run: |
+          $out = Join-Path $PWD "selftest.txt"
+          $p = Start-Process -FilePath "dist/Rocket Engine Sizing Tool/Rocket Engine Sizing Tool.exe" -ArgumentList "--selftest","`"$out`"" -PassThru -Wait
+          if (Test-Path $out) { Get-Content $out } else { Write-Host "No self-test output was written." }
+          if ($p.ExitCode -ne 0) { throw "The packaged app could not run the calculation (exit code $($p.ExitCode))" }
       - name: Zip
         shell: pwsh
         run: Compress-Archive -Path "dist/Rocket Engine Sizing Tool" -DestinationPath "Rocket-Sizing-Tool-Windows.zip"
@@ -54,6 +61,42 @@ jobs:
         with:
           name: Rocket-Sizing-Tool-Windows
           path: Rocket-Sizing-Tool-Windows.zip
+      - name: Pretend the files came from an internet download
+        # Windows marks downloaded files as "from another computer", which
+        # used to stop the app from starting. Mark them the same way here so
+        # the next step proves the app copes with it.
+        shell: pwsh
+        run: |
+          Get-ChildItem "dist/Rocket Engine Sizing Tool" -Recurse -Filter *.dll | ForEach-Object {
+            Set-Content -Path $_.FullName -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3"
+          }
+      - name: Open the app like a user would and check it fully loads
+        shell: pwsh
+        run: |
+          function Note($kind, $title, $text) {
+            $t = ($text -replace '%','%25') -replace "`r",'' -replace "`n",'%0A'
+            Write-Host "::$kind title=$title::$t"
+          }
+          $log = Join-Path $env:LOCALAPPDATA "Rocket Engine Sizing Tool\app.log"
+          if (Test-Path $log) { Remove-Item $log }
+          $p = Start-Process -FilePath "dist/Rocket Engine Sizing Tool/Rocket Engine Sizing Tool.exe" -PassThru
+          $ok = $false
+          for ($i = 0; $i -lt 240 -and -not $ok; $i++) {
+            Start-Sleep -Seconds 1
+            if ($p.HasExited) { break }
+            if ((Test-Path $log) -and (Select-String -Path $log -Pattern "\[loading\] step 5" -Quiet)) { $ok = $true }
+          }
+          Start-Sleep -Seconds 3
+          $alive = -not $p.HasExited
+          Get-Process -Name "Rocket Engine Sizing Tool" -ErrorAction SilentlyContinue | Stop-Process -Force
+          $text = if (Test-Path $log) { (Get-Content $log -Tail 60) -join "`n" } else { "(no app.log was written)" }
+          Write-Host $text
+          if ($ok -and $alive) {
+            Note "notice" "App test passed" "The app opened, finished loading and was still running.`n$text"
+          } else {
+            Note "error" "App test failed" "loaded=$ok still-running=$alive after $i s`n$text"
+            throw "The app did not fully load"
+          }
       - name: Attach to the Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2

@@ -90,6 +90,44 @@ def log_path():
 
 
 
+def unblock_downloaded_files():
+    """Windows tags every file unzipped from an internet download as "came
+    from another computer" (a hidden Zone.Identifier mark). .NET, which draws
+    the window on Windows, then refuses to load its DLLs and the app crashes
+    with "Failed to resolve Python.Runtime.Loader.Initialize". Removing the
+    mark from this program's own DLLs is the same as ticking "Unblock" in
+    each file's Properties."""
+    if os.name != "nt" or not FROZEN:
+        return
+    for root, _dirs, files in os.walk(HERE):
+        for name in files:
+            if name.lower().endswith(".dll"):
+                try:
+                    os.remove(os.path.join(root, name) + ":Zone.Identifier")
+                except OSError:
+                    pass   # not marked, or no permission: nothing to do
+
+
+def selftest(out_path):
+    """Used by the build on GitHub: runs the whole calculation once with the
+    default design and writes the result to out_path, so a download that
+    can't calculate is caught before anyone gets it."""
+    import traceback
+    try:
+        import engine
+        res = engine.size_engine(engine.Inputs())
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot  # noqa: F401
+        import splash, updates, version  # noqa: F401,E401
+        msg, code = f"SELFTEST OK  Isp_vac={res.Isp_vac:.1f} s  Dt={res.Dt:.3f} in", 0
+    except BaseException:
+        msg, code = "SELFTEST FAILED\n" + traceback.format_exc(), 1
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(msg + "\n")
+    sys.exit(code)
+
+
 def update_from_git():
     """For copies downloaded with git: get the newest version from GitHub
     before starting. "--ff-only" only ever moves forward to GitHub's version,
@@ -148,7 +186,11 @@ def main():
     if len(sys.argv) >= 3 and sys.argv[1] == "--serve":
         serve(sys.argv[2], watch_parent="--watch-parent" in sys.argv)
         return
+    if len(sys.argv) >= 3 and sys.argv[1] == "--selftest":
+        selftest(sys.argv[2])
+        return
 
+    unblock_downloaded_files()   # must run before webview loads its DLLs
     import webview   # only the window process needs it
 
     port = free_port()
@@ -167,6 +209,8 @@ def main():
         background_color="#0b3866", text_select=True)
 
     server = []
+    closed = []
+    window.events.closed += lambda: closed.append(True)
 
     def load_app():
         # Runs once the window is open, so the loading screen shows meanwhile.
@@ -187,6 +231,18 @@ def main():
             window.evaluate_js("document.body.innerHTML = "
                                + json.dumps(splash.splash_html(1)))
             window.load_url(url)
+            # If the server stops while the window is open, say so instead of
+            # leaving the loading screen up forever.
+            code = server[0].wait()
+            print(f"Server stopped with exit code {code}", flush=True)
+            if closed:
+                return   # normal: the user closed the window
+            try:
+                window.load_html(splash.splash_page(0, error=(
+                    f"The engine server stopped unexpectedly (code {code}). Details: "
+                    + log_path().replace("&", "&amp;").replace("<", "&lt;"))))
+            except Exception:
+                pass   # the window was already closed
         else:
             window.load_html(splash.splash_page(0, error=(
                 "Could not start. Details: "
@@ -206,4 +262,15 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        # Without a console the error would only appear in a popup; keep a
+        # copy in app.log so it can be sent to the developer.
+        import traceback
+        try:
+            with open(log_path(), "a", encoding="utf-8") as f:
+                f.write("The app crashed:\n" + traceback.format_exc())
+        except Exception:
+            pass
+        raise

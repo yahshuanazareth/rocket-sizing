@@ -37,6 +37,7 @@ _last_step = [time.monotonic()]
 
 def loading_stage(n):
     if FIRST_LOAD:
+        print(f"[loading] step {n}", flush=True)   # shows in app.log
         wait = MIN_STEP_SECONDS - (time.monotonic() - _last_step[0])
         if wait > 0:
             time.sleep(wait)
