@@ -66,6 +66,15 @@ def serve(port, watch_parent=False):
     """Run the Streamlit server inside this process."""
     if watch_parent:
         threading.Thread(target=exit_with_parent, daemon=True).start()
+    # Load the heavy math libraries now, on the main thread. On Windows,
+    # numpy can freeze forever if its first import happens on the background
+    # thread Streamlit runs app.py on (it hung at 20% on the loading screen).
+    import numpy  # noqa: F401
+    import pandas  # noqa: F401
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot  # noqa: F401
+    import engine  # noqa: F401  (loads NASA CEA)
     from streamlit.web import cli as stcli
     sys.argv = ["streamlit", "run", os.path.join(HERE, "app.py"),
                 *server_options(port)]
