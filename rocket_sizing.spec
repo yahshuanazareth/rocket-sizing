@@ -5,11 +5,14 @@
 #     pyinstaller rocket_sizing.spec
 # The result appears in dist/.
 
+import re
 import sys
 from PyInstaller.utils.hooks import (collect_all, collect_data_files,
                                      collect_dynamic_libs, copy_metadata)
 
 NAME = "Rocket Engine Sizing Tool"
+with open("version.py", encoding="utf-8") as f:
+    VERSION = re.search(r'VERSION = "(.*?)"', f.read()).group(1)
 
 # Program files the Streamlit server reads at run time
 datas = [("app.py", "."), ("engine.py", "."), ("splash.py", "."), ("updates.py", "."), ("version.py", "."),
@@ -74,7 +77,7 @@ if sys.platform == "darwin":
         bundle_identifier="com.yahshuanazareth.rocketsizing",
         info_plist={
             "CFBundleDisplayName": NAME,
-            "CFBundleShortVersionString": "1.0",
+            "CFBundleShortVersionString": VERSION,
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
         },
