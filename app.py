@@ -60,6 +60,7 @@ if FIRST_LOAD:
 import datetime
 import io
 import logging
+import threading
 
 import matplotlib
 matplotlib.use("Agg")
@@ -103,6 +104,40 @@ plt.rcParams.update({
     "hatch.color": WHITE,
     "hatch.linewidth": 0.5,
 })
+
+# Matplotlib is not built to draw several figures at once, but Streamlit can
+# run the script on more than one thread (for example when an input changes
+# while the page is still drawing). Drawing one figure at a time, under one
+# shared lock, keeps the drawing from coming out with oversized text.
+# (Kept on the matplotlib module so every rerun and session shares one lock.)
+PLOT_LOCK = matplotlib.__dict__.setdefault("_rocket_tool_plot_lock",
+                                           threading.RLock())
+
+
+def figure_png(make, *args, dpi=200, **kwargs):
+    """Build a figure with make(...) and return it as PNG bytes."""
+    with PLOT_LOCK:
+        fig = make(*args, **kwargs)
+        try:
+            buf = io.BytesIO()
+            fig.savefig(buf, format="png", dpi=dpi)
+            return buf.getvalue()
+        finally:
+            plt.close(fig)
+
+
+def show_plot(png):
+    st.image(png, width="stretch")
+
+
+def fit_text(text, ax, max_width):
+    """Shrink a text label until it is at most max_width wide (in axes units),
+    so long values never spill out of their box."""
+    fig = ax.figure
+    renderer = fig.canvas.get_renderer()
+    limit = max_width * ax.get_window_extent(renderer).width
+    while text.get_fontsize() > 5 and text.get_window_extent(renderer).width > limit:
+        text.set_fontsize(text.get_fontsize() - 0.25)
 
 st.markdown(f"""
 <style>
@@ -267,7 +302,7 @@ def draw_blueprint(res, inp):
     wall = 0.08 * res.Dc + 0.06
     R = rs.max() + wall
 
-    fig = plt.figure(figsize=(14, 9))
+    fig = plt.figure(figsize=(14, 9), dpi=100)
 
     # Background sheet: grid and border
     bg = fig.add_axes([0, 0, 1, 1])
@@ -311,14 +346,23 @@ def draw_blueprint(res, inp):
             fontsize=8)
 
     # Stations
-    names = ["", "STA 1\nCHAMBER", "STA 2\nTHROAT", "STA 3\nEXIT"]
-    for x, name in zip(xs[1:], names[1:]):
+    names = ["INJECTOR\nFACE", "STA 1\nCHAMBER", "STA 2\nTHROAT", "STA 3\nEXIT"]
+    for x in xs[1:]:
         ax.plot([x, x], [-R * 1.05, R * 1.25], color=SOFT, lw=0.6,
                 linestyle=(0, (4, 3)))
-        ax.text(x, R * 1.32, name, ha="center", va="bottom", fontsize=8,
+    # When two stations are close together, lift the second label so the
+    # labels don't print on top of each other.
+    label_y, prev_x, prev_lifted, any_lift = R * 1.32, None, False, False
+    for x, name in zip([0.0, *xs[1:]], names):
+        lift = prev_x is not None and x - prev_x < 0.11 * L and not prev_lifted
+        y = label_y + (0.42 * R if lift else 0)
+        if lift:
+            ax.plot([x, x], [R * 1.25, y], color=SOFT, lw=0.6,
+                    linestyle=(0, (4, 3)))
+        ax.text(x, y, name, ha="center", va="bottom", fontsize=8,
                 color=SOFT, linespacing=1.1)
-    ax.text(0, R * 1.32, "INJECTOR\nFACE", ha="center", va="bottom",
-            fontsize=8, color=SOFT, linespacing=1.1)
+        prev_x, prev_lifted = x, lift
+        any_lift = any_lift or lift
 
     # Diameters
     dim_line(ax, (0.62 * xs[1], -rs[0]), (0.62 * xs[1], rs[0]),
@@ -351,7 +395,7 @@ def draw_blueprint(res, inp):
     dim_line(ax, (0, y2), (xs[3], y2), f"OVERALL {res.L_total:.3f}")
 
     ax.set_xlim(-0.08 * L, 1.07 * L)
-    ax.set_ylim(y2 - 0.35 * R, R * 1.75)
+    ax.set_ylim(y2 - 0.35 * R, R * (2.15 if any_lift else 1.75))
 
     # Station table (bottom left)
     tb = fig.add_axes([0.035, 0.04, 0.56, 0.27])
@@ -380,9 +424,10 @@ def draw_blueprint(res, inp):
         y = 0.57 - i * 0.125
         for x, v in zip(cx, row):
             tb.text(x, y, v, fontsize=8.5, va="center")
-    tb.text(0.03, 0.04, f"γ = {res.gamma:.3f}   MW = {res.mol_wt:.2f}   "
-            f"Cf,vac = {res.Cf_vac:.3f}   Cf,SL = {res.Cf_sl:.3f}   "
-            f"L* = {inp.Lstar:.0f} in", fontsize=8, color=SOFT)
+    footer = tb.text(0.03, 0.04, f"γ = {res.gamma:.3f}   MW = {res.mol_wt:.2f}   "
+                     f"Cf,vac = {res.Cf_vac:.3f}   Cf,SL = {res.Cf_sl:.3f}   "
+                     f"L* = {inp.Lstar:.0f} in", fontsize=8, color=SOFT)
+    fit_text(footer, tb, 0.94)
 
     # Title block (bottom right)
     tt = fig.add_axes([0.61, 0.04, 0.355, 0.27])
@@ -391,14 +436,14 @@ def draw_blueprint(res, inp):
     for y in (0.78, 0.60, 0.42, 0.24):
         tt.plot([0, 1], [y, y], color=WHITE, lw=0.6)
     tt.plot([0.5, 0.5], [0, 0.60], color=WHITE, lw=0.6)
-    tt.text(0.5, 0.89, DRAWING_TITLE, ha="center", va="center",
-            fontsize=10.5, fontweight="bold")
+    fit_text(tt.text(0.5, 0.89, DRAWING_TITLE, ha="center", va="center",
+                     fontsize=10.5, fontweight="bold"), tt, 0.94)
 
     def cell(x, y, label, value, size=9.5):
         tt.text(x + 0.02, y + 0.13, label, fontsize=6.5, color=SOFT,
                 va="center")
-        tt.text(x + 0.02, y + 0.05, value, fontsize=size, va="center",
-                fontweight="bold")
+        fit_text(tt.text(x + 0.02, y + 0.05, value, fontsize=size,
+                         va="center", fontweight="bold"), tt, 0.46)
 
     tt.text(0.02, 0.73, "PROPELLANTS / DESIGN POINT", fontsize=6.5,
             color=SOFT, va="center")
@@ -407,6 +452,7 @@ def draw_blueprint(res, inp):
             f"({'SL' if inp.thrust_at_sea_level else 'VAC'})   "
             f"Pc = {inp.Pc:.0f} psia   O/F = {inp.MR:.2f}   ε = {inp.eps:.1f}",
             fontsize=8, va="center")
+    fit_text(tt.texts[-1], tt, 0.96)
     cell(0.0, 0.42, "PROGRAM BY", AUTHOR.upper())
     cell(0.5, 0.42, "DATE", TODAY)
     cell(0.0, 0.24, "UNITS", "INCHES")
@@ -428,18 +474,15 @@ tab_draw, tab_results, tab_trades, tab_method = st.tabs(
 
 loading_stage(3)
 with tab_draw:
-    fig = draw_blueprint(res, inp)
-    st.pyplot(fig)
+    png = figure_png(draw_blueprint, res, inp, dpi=220)
+    st.image(png, width="stretch")
     st.caption("Thrust chamber cross-section, drawn to proportion from the "
                "calculated geometry. Inside-wall dimensions; wall thickness "
                "is illustrative only.")
-    png = io.BytesIO()
-    fig.savefig(png, format="png", dpi=220)
-    plt.close(fig)
 
     contour_df = pd.DataFrame(contour(res), columns=["x_in", "radius_in"])
     d1, d2, _ = st.columns([1, 1, 3])
-    d1.download_button("Download drawing (PNG)", png.getvalue(),
+    d1.download_button("Download drawing (PNG)", png,
                        f"{DWG_NO}.png", "image/png")
     d2.download_button("Download contour (CSV)",
                        contour_df.to_csv(index=False), f"{DWG_NO}_contour.csv",
@@ -501,20 +544,23 @@ with tab_results:
     with right:
         st.subheader("Exhaust composition")
         comp = cached_composition(settings)
-        names = list(comp)[:8][::-1]
-        y = np.arange(len(names))
-        fig, ax = plt.subplots(figsize=(5.4, 4.2))
-        ax.barh(y + 0.19, [comp[n][0] * 100 for n in names], 0.36,
-                color=WHITE, label="Chamber")
-        ax.barh(y - 0.19, [comp[n][1] * 100 for n in names], 0.36,
-                color=CYAN, label="Nozzle exit")
-        ax.set_yticks(y, names)
-        ax.set_xlabel("Mole fraction (%)")
-        ax.legend(frameon=False, fontsize=8, labelcolor=WHITE)
-        blueprint_axes(fig, ax)
-        fig.tight_layout()
-        st.pyplot(fig)
-        plt.close(fig)
+
+        def composition_plot(comp):
+            names = list(comp)[:8][::-1]
+            y = np.arange(len(names))
+            fig, ax = plt.subplots(figsize=(5.4, 4.2))
+            ax.barh(y + 0.19, [comp[n][0] * 100 for n in names], 0.36,
+                    color=WHITE, label="Chamber")
+            ax.barh(y - 0.19, [comp[n][1] * 100 for n in names], 0.36,
+                    color=CYAN, label="Nozzle exit")
+            ax.set_yticks(y, names)
+            ax.set_xlabel("Mole fraction (%)")
+            ax.legend(frameon=False, fontsize=8, labelcolor=WHITE)
+            blueprint_axes(fig, ax)
+            fig.tight_layout()
+            return fig
+
+        st.image(figure_png(composition_plot, comp), width="stretch")
         st.caption("At chamber temperature some products break apart "
                    "(dissociation into CO, OH, H, O). As the gas cools in "
                    "the nozzle they partly recombine into CO₂ and H₂O.")
@@ -564,13 +610,13 @@ with tab_trades:
         st.markdown("**Isp vs mixture ratio**")
         x = [v for v, _ in mr_s]
         isp = [r.Isp_vac for _, r in mr_s]
-        st.pyplot(line_plot(x, [isp], ["Isp vac"], "O/F", "Isp vac (s)", MR))
+        show_plot(figure_png(line_plot, x, [isp], ["Isp vac"], "O/F", "Isp vac (s)", MR))
         best = x[int(np.argmax(isp))]
         st.caption(f"Isp peaks near O/F = {best:.1f} ({max(isp):.1f} s). "
                    f"Design: {MR:.1f} ({res.Isp_vac:.1f} s).")
     with b:
         st.markdown("**Chamber temperature vs mixture ratio**")
-        st.pyplot(line_plot(x, [[r.Tc for _, r in mr_s]], ["Tc"], "O/F",
+        show_plot(figure_png(line_plot, x, [[r.Tc for _, r in mr_s]], ["Tc"], "O/F",
                             "Tc (°R)", MR, colors=[CYAN]))
         st.caption("Hotter gas is harder on the chamber walls, so peak Isp "
                    "is not automatically the best design.")
@@ -579,7 +625,7 @@ with tab_trades:
     with a:
         st.markdown("**Isp vs chamber pressure**")
         x = [v for v, _ in pc_s]
-        st.pyplot(line_plot(x, [[r.Isp_vac for _, r in pc_s],
+        show_plot(figure_png(line_plot, x, [[r.Isp_vac for _, r in pc_s],
                                 [r.Isp_sl for _, r in pc_s]],
                             ["Vacuum", "Sea level"], "Pc (psia)", "Isp (s)",
                             Pc))
@@ -587,7 +633,7 @@ with tab_trades:
                    "higher pressure overcomes the outside air.")
     with b:
         st.markdown("**Throat diameter vs chamber pressure**")
-        st.pyplot(line_plot(x, [[r.Dt for _, r in pc_s]], ["Dt"],
+        show_plot(figure_png(line_plot, x, [[r.Dt for _, r in pc_s]], ["Dt"],
                             "Pc (psia)", "Throat Ø (in)", Pc, colors=[CYAN]))
         st.caption("Higher pressure shrinks the engine, at the cost of "
                    "heavier tanks and thicker walls.")
@@ -596,7 +642,7 @@ with tab_trades:
     with a:
         st.markdown("**Isp vs expansion ratio**")
         x = [v for v, _ in eps_s]
-        st.pyplot(line_plot(x, [[r.Isp_vac for _, r in eps_s],
+        show_plot(figure_png(line_plot, x, [[r.Isp_vac for _, r in eps_s],
                                 [r.Isp_sl for _, r in eps_s]],
                             ["Vacuum", "Sea level"], "ε = Ae/At", "Isp (s)",
                             eps))
@@ -604,7 +650,7 @@ with tab_trades:
                    f"optimum is ε ≈ {res.eps_optimum:.1f} at this Pc.")
     with b:
         st.markdown("**Nozzle length vs expansion ratio**")
-        st.pyplot(line_plot(x, [[r.L_nozzle for _, r in eps_s]], ["Ln"],
+        show_plot(figure_png(line_plot, x, [[r.L_nozzle for _, r in eps_s]], ["Ln"],
                             "ε = Ae/At", "Nozzle length (in)", eps,
                             colors=[CYAN]))
         st.caption("The extra Isp is paid for in nozzle length and weight.")
