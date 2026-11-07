@@ -66,6 +66,8 @@ import matplotlib
 matplotlib.use("Agg")
 logging.getLogger("matplotlib").setLevel(logging.ERROR)
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.figure import Figure
 from matplotlib.patches import Polygon, Rectangle
 import numpy as np
 import pandas as pd
@@ -105,25 +107,31 @@ plt.rcParams.update({
     "hatch.linewidth": 0.5,
 })
 
-# Matplotlib is not built to draw several figures at once, but Streamlit can
-# run the script on more than one thread (for example when an input changes
-# while the page is still drawing). Drawing one figure at a time, under one
-# shared lock, keeps the drawing from coming out with oversized text.
+# Streamlit can run this script on more than one thread at once (for example
+# when an input changes while the page is still drawing). Pyplot's shared
+# figure list is not safe for that: two threads could be handed the same
+# figure and draw over each other, scrambling the drawing. So every figure
+# here is a standalone Figure (never registered with pyplot), and they are
+# drawn one at a time under one shared lock.
 # (Kept on the matplotlib module so every rerun and session shares one lock.)
 PLOT_LOCK = matplotlib.__dict__.setdefault("_rocket_tool_plot_lock",
                                            threading.RLock())
+
+
+def new_figure(figsize, dpi=100):
+    """A standalone figure that belongs only to the code that made it."""
+    fig = Figure(figsize=figsize, dpi=dpi)
+    FigureCanvasAgg(fig)
+    return fig
 
 
 def figure_png(make, *args, dpi=200, **kwargs):
     """Build a figure with make(...) and return it as PNG bytes."""
     with PLOT_LOCK:
         fig = make(*args, **kwargs)
-        try:
-            buf = io.BytesIO()
-            fig.savefig(buf, format="png", dpi=dpi)
-            return buf.getvalue()
-        finally:
-            plt.close(fig)
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", dpi=dpi)
+        return buf.getvalue()
 
 
 def show_plot(png):
@@ -302,7 +310,7 @@ def draw_blueprint(res, inp):
     wall = 0.08 * res.Dc + 0.06
     R = rs.max() + wall
 
-    fig = plt.figure(figsize=(14, 9), dpi=100)
+    fig = new_figure((14, 9))
 
     # Background sheet: grid and border
     bg = fig.add_axes([0, 0, 1, 1])
@@ -548,7 +556,8 @@ with tab_results:
         def composition_plot(comp):
             names = list(comp)[:8][::-1]
             y = np.arange(len(names))
-            fig, ax = plt.subplots(figsize=(5.4, 4.2))
+            fig = new_figure((5.4, 4.2))
+            ax = fig.subplots()
             ax.barh(y + 0.19, [comp[n][0] * 100 for n in names], 0.36,
                     color=WHITE, label="Chamber")
             ax.barh(y - 0.19, [comp[n][1] * 100 for n in names], 0.36,
@@ -573,7 +582,8 @@ with tab_results:
 # Trade studies
 # ---------------------------------------------------------------------------
 def line_plot(x, ys, labels, xlabel, ylabel, current_x, colors=None):
-    fig, ax = plt.subplots(figsize=(5.4, 3.5))
+    fig = new_figure((5.4, 3.5))
+    ax = fig.subplots()
     colors = colors or [WHITE, CYAN]
     styles = ["-", (0, (5, 2))]
     for y, label, color, ls in zip(ys, labels, colors, styles):
@@ -654,7 +664,6 @@ with tab_trades:
                             "ε = Ae/At", "Nozzle length (in)", eps,
                             colors=[CYAN]))
         st.caption("The extra Isp is paid for in nozzle length and weight.")
-    plt.close("all")
 
 
 # ---------------------------------------------------------------------------

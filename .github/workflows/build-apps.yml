@@ -59,8 +59,10 @@ jobs:
         run: Compress-Archive -Path "dist/Rocket Engine Sizing Tool" -DestinationPath "Rocket-Sizing-Tool-Windows.zip"
       - uses: actions/upload-artifact@v4
         with:
+          # GitHub zips artifacts itself, so upload the app folder (not the
+          # zip) to avoid a zip inside a zip. Releases still get the zip.
           name: Rocket-Sizing-Tool-Windows
-          path: Rocket-Sizing-Tool-Windows.zip
+          path: dist/
       - name: Pretend the files came from an internet download
         # Windows marks downloaded files as "from another computer", which
         # used to stop the app from starting. Mark them the same way here so
