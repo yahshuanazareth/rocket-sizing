@@ -7,5 +7,5 @@ When you publish a new release:
 The build on GitHub refuses to run if the two don't match.
 """
 
-VERSION = "1.1"
+VERSION = "1.2"
 REPO = "yahshuanazareth/rocket-sizing"   # where to look for newer releases
