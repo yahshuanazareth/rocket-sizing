@@ -106,7 +106,11 @@ jobs:
           files: Rocket-Sizing-Tool-Windows.zip
 
   mac:
-    runs-on: macos-latest   # Apple Silicon (M-series) Mac
+    # Apple Silicon (M-series) Mac. Built on an older macOS on purpose: an app
+    # only runs on the macOS it was built on or newer.
+    runs-on: macos-14
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "12.0"
     steps:
       - uses: actions/checkout@v4
       - name: Check version.py matches the tag
