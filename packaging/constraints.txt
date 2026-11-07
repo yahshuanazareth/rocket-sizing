@@ -1,0 +1,16 @@
+# Exact library versions for the downloadable apps built on GitHub.
+#
+# Windows' Smart App Control blocks library files it hasn't seen before, and
+# every new release of a library is "new" to it for a while. A pandas update
+# released three days before a build was blocked on a real PC, so the builds
+# use these versions (known to work) instead of whatever came out last.
+# Update them on purpose, then test the new download on a Windows PC.
+numpy==2.5.4
+scipy==1.18.1
+matplotlib==3.11.2
+pandas==3.1.0
+rocketcea==1.2.3
+streamlit==1.66.1
+pywebview==6.2.1
+pythonnet==3.2.1
+pyinstaller==6.22.3

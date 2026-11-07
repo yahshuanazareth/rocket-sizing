@@ -113,13 +113,13 @@ def unblock_downloaded_files():
     from another computer" (a hidden Zone.Identifier mark). .NET, which draws
     the window on Windows, then refuses to load its DLLs and the app crashes
     with "Failed to resolve Python.Runtime.Loader.Initialize". Removing the
-    mark from this program's own DLLs is the same as ticking "Unblock" in
-    each file's Properties."""
+    mark from this program's own DLLs (and .pyd files, which are DLLs too) is
+    the same as ticking "Unblock" in each file's Properties."""
     if os.name != "nt" or not FROZEN:
         return
     for root, _dirs, files in os.walk(HERE):
         for name in files:
-            if name.lower().endswith(".dll"):
+            if name.lower().endswith((".dll", ".pyd")):
                 try:
                     os.remove(os.path.join(root, name) + ":Zone.Identifier")
                 except OSError:
