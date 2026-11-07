@@ -173,7 +173,15 @@ h1, h2, h3, h4 {{ font-family: monospace !important; letter-spacing: 0.04em; }}
   color: rgba(255,255,255,0.45); pointer-events: none;
 }}
 header[data-testid="stHeader"] {{ background: transparent; }}
-[data-testid="stToolbar"], [data-testid="stDecoration"] {{ display: none; }}
+[data-testid="stDecoration"] {{ display: none; }}
+/* Keep the toolbar (it holds the button that reopens the sidebar) but hide
+   everything else in it. */
+[data-testid="stToolbarActions"], [data-testid="stMainMenu"],
+[data-testid="stAppDeployButton"] {{ display: none; }}
+[data-testid="stExpandSidebarButton"] {{
+  border: 1px solid rgba(255,255,255,0.6); border-radius: 0;
+  background: {BG}; color: {WHITE};
+}}
 .bp-sub {{ font-family: monospace; color: {SOFT}; font-size: 0.85rem;
            letter-spacing: 0.06em; }}
 </style>
