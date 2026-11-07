@@ -108,7 +108,7 @@ jobs:
   mac:
     # Apple Silicon (M-series) Mac. Built on an older macOS on purpose: an app
     # only runs on the macOS it was built on or newer.
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       MACOSX_DEPLOYMENT_TARGET: "12.0"
     steps:
