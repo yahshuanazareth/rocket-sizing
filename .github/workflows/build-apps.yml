@@ -137,6 +137,11 @@ jobs:
           "$APP" --selftest "$PWD/selftest.txt" || code=$?
           cat selftest.txt 2>/dev/null || echo "No self-test output was written."
           if [ -n "$code" ]; then echo "::error::The packaged app could not run the calculation"; exit 1; fi
+      - name: Report the oldest macOS the app runs on
+        run: |
+          oldest=$(find "dist/Rocket Engine Sizing Tool.app" -type f \( -name "*.dylib" -o -name "*.so" \) -exec vtool -show-build {} \; 2>/dev/null \
+                   | awk '/minos/ {print $2}' | sort -V | tail -1)
+          echo "::notice title=Oldest macOS supported::macOS $oldest or later"
       - name: Zip
         # ditto keeps the app bundle's links and signature intact
         run: ditto -c -k --keepParent "dist/Rocket Engine Sizing Tool.app" Rocket-Sizing-Tool-Mac.zip
